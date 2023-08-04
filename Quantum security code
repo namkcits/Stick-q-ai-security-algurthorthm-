@@ -1,31 +1,53 @@
-from kivy.app import App
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.label import Label
-from kivy.uix.button import Button
-from qiskit import QuantumCircuit, Aer, execute
-import hashlib
-import random
 import json
+import hashlib
 import logging
+from qiskit import QuantumCircuit, Aer, execute
+import random
 
-DATA_FILE = 'data.json'  # File to store the data
+NUM_QUBITS = 10  # Number of qubits for quantum communication
 
-# Quantum Key Distribution (QKD) Functions
+# Setting up the logger
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
+# Function to create an entangled quantum circuit with a specified number of qubits
 def create_entangled_qubits(num_qubits):
     circuit = QuantumCircuit(num_qubits, num_qubits)
     for i in range(1, num_qubits):
         circuit.cx(0, i)
     return circuit
 
+# Function to encode owner data as qubits in the quantum circuit
 def encode_owner_data(owner_data, circuit):
     for i, bit in enumerate(owner_data):
         if bit == '1':
             circuit.x(i)
     return circuit
 
-def bb84_protocol(circuit, num_qubits):
-    # BB84 Protocol for Quantum Key Distribution
+# Function to perform entanglement swapping between distant qubits (quantum repeater)
+def entanglement_swapping(circuit, qubit_A, qubit_B, qubit_C):
+    circuit.cx(qubit_A, qubit_B)
+    circuit.h(qubit_A)
+    circuit.cx(qubit_C, qubit_A)
+    circuit.h(qubit_C)
+    circuit.cx(qubit_B, qubit_C)
+    circuit.cz(qubit_A, qubit_C)
+
+# Function to implement quantum repeaters to extend communication distance
+def quantum_repeater(circuit, num_qubits):
+    for i in range(num_qubits // 3):
+        qubit_A = 3 * i
+        qubit_B = 3 * i + 1
+        qubit_C = 3 * i + 2
+        entanglement_swapping(circuit, qubit_A, qubit_B, qubit_C)
+
+# Function to implement the BB84 protocol for Quantum Key Distribution
+def bb84_protocol(circuit, num_qubits, owner_data):
+    # Calculate SHA256 hash of the owner data
+    sha256_hash = hashlib.sha256(owner_data.encode()).hexdigest()
+    logger.info(f"Owner data SHA256 hash: {sha256_hash}")
+
+    circuit = encode_owner_data(owner_data, circuit)
 
     alice_basis = [random.randint(0, 1) for _ in range(num_qubits)]
     alice_bits = [random.randint(0, 1) for _ in range(num_qubits)]
@@ -42,9 +64,11 @@ def bb84_protocol(circuit, num_qubits):
         if bob_basis[i] == 1:
             circuit.h(i)
 
+    quantum_repeater(circuit, num_qubits)
+
     circuit.measure(range(num_qubits), range(num_qubits))
 
-    backend = Aer.get_backend('qasm_simulator')
+    backend = Aer.get_backend('qasm_simulator')  # Using AER simulator as the backend
     job = execute(circuit, backend)
     result = job.result()
     counts = result.get_counts(circuit)
@@ -55,6 +79,7 @@ def bb84_protocol(circuit, num_qubits):
 
     return counts, shared_basis_info
 
+# Function to verify the shared key between Alice and Bob
 def verify_shared_key(circuit, alice_basis_str, bob_basis_str):
     if alice_basis_str == bob_basis_str:
         circuit.measure(0, 0)
@@ -67,95 +92,38 @@ def verify_shared_key(circuit, alice_basis_str, bob_basis_str):
 
         if alice_basis_str == '0':
             if shared_key == '0':
-                print("Shared key verified in Hadamard basis.")
+                logger.info("Shared key verified in Hadamard basis.")
             else:
-                print("Key tampering detected in Hadamard basis.")
+                logger.warning("Key tampering detected in Hadamard basis.")
         else:
             if shared_key == '1':
-                print("Shared key verified in Hadamard-S basis.")
+                logger.info("Shared key verified in Hadamard-S basis.")
             else:
-                print("Key tampering detected in Hadamard-S basis.")
+                logger.warning("Key tampering detected in Hadamard-S basis.")
     else:
-        print("Alice and Bob measured the qubit in different bases. Key tampering detected.")
-
-def bit_flip_error_correction(circuit):
-    circuit.ccx(0, 1, 2)
-    circuit.cx(0, 1)
-    circuit.measure(2, 2)
-
-    backend = Aer.get_backend('qasm_simulator')
-    job = execute(circuit, backend)
-    result = job.result()
-    counts = result.get_counts(circuit)
-
-    if '1' in counts:
-        circuit.x(0)
-
-    return circuit
-
-# Saving Data Functions
-
-def save_data_to_secure_file(data, filename):
-    sha256_hash = hashlib.sha256(data.encode()).hexdigest()
-    data_to_save = {'data': data, 'sha256_hash': sha256_hash}
-    with open(filename, 'w') as file:
-        json.dump(data_to_save, file)
-
-def classical_key_generation(num_bits):
-    key = ''.join(random.choice(['0', '1']) for _ in range(num_bits))
-    return key
-
-def generate_quantum_name(owner_name, token_value):
-    owner_data = owner_name + token_value
-    num_qubits = len(owner_data) + 2
-
-    entangled_circuit = create_entangled_qubits(num_qubits)
-    encoded_circuit = encode_owner_data(owner_data, entangled_circuit)
-    encoded_circuit.measure(range(num_qubits-2, num_qubits), range(num_qubits-2, num_qubits))
-    corrected_circuit = bit_flip_error_correction(encoded_circuit)
-
-    counts, shared_basis_info = bb84_protocol(corrected_circuit, num_qubits)
-
-    alice_basis_str = shared_basis_info['alice_basis']
-    bob_basis_str = shared_basis_info['bob_basis']
-
-    verify_shared_key(corrected_circuit, alice_basis_str, bob_basis_str)
-    secure_key = classical_key_generation(num_qubits - 2)
-
-    filename = f"{owner_name}_secure_data.json"
-    save_data_to_secure_file(secure_key, filename)
-    print("Secure data saved to:", filename)
-
-# Kivy App
-
-from kivy.lang import Builder
-
-kv_string = '''
-<QuantumApp>:
-    orientation: 'vertical'
-    Label:
-        id: status_label
-        text: "Quantum App"
-    Button:
-        text: "Generate Quantum Name"
-        on_press: root.on_button_click()
-'''
-
-class QuantumApp(App):
-    def build(self):
-        self.layout = Builder.load_string(kv_string)
-        return self.layout
-
-    def on_button_click(self):
-        owner_name = "add data no spaces"  # Replace with the actual owner's name
-        token_value = "500"  # Replace with the actual token value
-        try:
-            generate_quantum_name(owner_name, token_value)
-            self.layout.ids.status_label.text = "Quantum Name generated and saved to file."
-        except Exception as e:
-            logging.error(f"An error occurred while generating the Quantum Name: {str(e)}")
-            self.layout.ids.status_label.text = "Error occurred. Please check log for details."
+        logger.warning("Alice and Bob measured the qubit in different bases. Key tampering detected.")
 
 if __name__ == "__main__":
-    logging.basicConfig(filename='app.log', level=logging.DEBUG)
-    QuantumApp().run()
+    # Owner data to be encoded as qubits (Example: "1100101010")
+    owner_data = "add user data"
+
+    # Create an entangled circuit
+    circuit = create_entangled_qubits(NUM_QUBITS)
+
+    # Perform BB84 protocol with quantum repeaters for QKD
+    counts, shared_basis_info = bb84_protocol(circuit, NUM_QUBITS, owner_data)
+
+    # Verify shared key between Alice and Bob
+    verify_shared_key(circuit, shared_basis_info['alice_basis'], shared_basis_info['bob_basis'])
+
+    # Save results to a secure file
+    results = {
+        'owner_data': owner_data,
+        'owner_data_hash': hashlib.sha256(owner_data.encode()).hexdigest(),
+        'counts': counts,
+        'shared_basis_info': shared_basis_info
+    }
+
+    # Save the results as JSON data in a file
+    with open('secure_results.json', 'w') as file:
+        json.dump(results, file)
