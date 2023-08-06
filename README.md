@@ -1,5 +1,4 @@
- step-by-step explanation of how the code works:ks:
-
+readme
 1. Import necessary libraries: The code starts by importing required Python libraries, including `json` for data serialization, `hashlib` for SHA256 hashing, `logging` for logging messages, and the `qiskit` library for quantum computing.
 
 2. Define the number of qubits: The variable `NUM_QUBITS` is set to 10, representing the number of qubits to be used for quantum communication.
@@ -31,4 +30,5 @@
    - After executing the BB84 protocol and verifying the shared key, the results are saved to a secure JSON file (`secure_results.json`).
    - The file contains the owner's data, owner's data hash, counts from the quantum measurement, and shared basis information.
 
-By running the code, you would execute the BB84 protocol, which enables secure communication by generating shared keys between Alice and Bob using quantum properties. The secure JSON file `secure_results.json` will contain the necessary information for further communication between the two parties. Note that this code is intended for educational purposes and simulations using the Aer simulator. To implement it on a real quantum computer, you would need access to appropriate hardware.
+By running the code, you would execute the BB84 protocol, which enables secure communication by generating shared keys between Alice and Bob using quantum properties. The secure JSON file `secure_results.json` will contain the necessary information for further communication between the two parties. Note that this code is intended for educational purposes and simulations using the Aer simulator. To implement it on a real quantum computer, you would need access to appropriate hardware.  please be aware this is not a currency it is not a crypto iit is a security protocol its does have a way gor future but this was not mentbfor that it is ment to to protect your assets dont code it into the smart contract only if you know what your doing
+(stickman s, helped by chat gpt)
